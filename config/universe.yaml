@@ -1,0 +1,116 @@
+# Пул монет — Этап 1. Процедура и источник: docs/01_PROTOCOL.md, раздел 3;
+# полный разбор снимка и исключений: reports/data_quality/cmc_snapshot_2025-12-28.md
+#
+# Снимок: CoinMarketCap, историческая страница на 2025-12-28 (последнее воскресенье 2025 года).
+# Правило: топ-10 по капитализации на конец 2025 года, без BTC/ETH/стейблкоинов/обёрнутых
+# и стейкинговых токенов/монет без USDT-M перпетуала на Binance на 2025-12-31.
+# Точные даты листинга перпетуала для "старых" монет (~2020) подлежат уточнению на Этапе 2
+# через Binance fapi/v1/exchangeInfo — здесь они приблизительные, но точно предшествуют
+# data_start (2022-01-01), поэтому на прогрев и фолды walk-forward не влияют.
+
+snapshot_source: "https://coinmarketcap.com/historical/20251228/"
+snapshot_date: "2025-12-28"
+
+pool:
+  - ticker: BNB
+    binance_symbol: BNBUSDT
+    cmc_rank: 4
+    market_cap_usd: 118290532566
+    perp_listed_approx: "2020"
+    short_history: false
+
+  - ticker: XRP
+    binance_symbol: XRPUSDT
+    cmc_rank: 5
+    market_cap_usd: 112929746807
+    perp_listed_approx: "2020"
+    short_history: false
+
+  - ticker: SOL
+    binance_symbol: SOLUSDT
+    cmc_rank: 7
+    market_cap_usd: 70459749897
+    perp_listed_approx: "2020"
+    short_history: false
+
+  - ticker: TRX
+    binance_symbol: TRXUSDT
+    cmc_rank: 8
+    market_cap_usd: 26979373255
+    perp_listed_approx: "2020"
+    short_history: false
+
+  - ticker: DOGE
+    binance_symbol: DOGEUSDT
+    cmc_rank: 9
+    market_cap_usd: 20813536578
+    perp_listed_approx: "2020"
+    short_history: false
+
+  - ticker: ADA
+    binance_symbol: ADAUSDT
+    cmc_rank: 10
+    market_cap_usd: 13241227940
+    perp_listed_approx: "2020"
+    short_history: false
+
+  - ticker: BCH
+    binance_symbol: BCHUSDT
+    cmc_rank: 11
+    market_cap_usd: 12411259641
+    perp_listed_approx: "2020"
+    short_history: false
+
+  - ticker: LINK
+    binance_symbol: LINKUSDT
+    cmc_rank: 12
+    market_cap_usd: 8835112334
+    perp_listed_approx: "2020"
+    short_history: false
+
+  - ticker: ZEC
+    binance_symbol: ZECUSDT
+    cmc_rank: 13
+    market_cap_usd: 8726314021
+    perp_listed: "2020-02-05"   # подтверждено объявлением Binance
+    short_history: false
+
+  - ticker: HYPE
+    binance_symbol: HYPEUSDT
+    cmc_rank: 14
+    market_cap_usd: 8603707638
+    perp_listed: "2025-05-30"   # подтверждено объявлением Binance
+    short_history: true
+    short_history_note: >
+      Перпетуал листингован только 2025-05-30. Нет истории для варминга длинных окон
+      (S01/S01b, до 360 дней) почти весь dev-период; естественно выпадает из фолдов
+      F1-F3 и частично F4 по правилу coin_min_trades_train (04_OPTIMIZATION.md §5).
+      В holdout (2026) участвует полноценно. В отчётах — пометка ⏳.
+
+# служебный символ для фильтра режима (надстройка O1), не торгуется
+btc_filter_symbol: BTCUSDT
+
+excluded:
+  - ticker: BTC
+    cmc_rank: 1
+    reason: "явное исключение протокола (01_PROTOCOL §3)"
+  - ticker: ETH
+    cmc_rank: 2
+    reason: "явное исключение протокола (01_PROTOCOL §3)"
+  - ticker: USDT
+    cmc_rank: 3
+    reason: "стейблкоин"
+  - ticker: USDC
+    cmc_rank: 6
+    reason: "стейблкоин"
+  - ticker: XMR
+    cmc_rank: 15
+    reason: >
+      Нет USDT-M перпетуала на Binance на 2025-12-31 — Coin-M XMRUSD и спот делистингованы
+      Binance 2024-02-15/20 (регуляторный делистинг privacy-монет), с тех пор не возвращались.
+  - ticker: LEO
+    cmc_rank: 16
+    reason: "нет USDT-M перпетуала на Binance (пример из самого протокола)"
+  - ticker: USDe
+    cmc_rank: 18
+    reason: "стейблкоин (Ethena USDe, привязан к USD)"
