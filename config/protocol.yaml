@@ -1,0 +1,67 @@
+# Константы протокола честного бэктеста.
+# Единственный источник правды: код читает значения отсюда, хардкод запрещён.
+# После заморозки (git tag holdout-freeze-v1) файл не меняется.
+
+protocol_version: 1
+frozen: false            # true ставится на Этапе 8 одновременно с git tag
+
+exchange:
+  venue: binance_usdm_perp
+  quote: USDT
+  order_type: market     # на первом этапе только рыночные ордера
+  fee_taker: 0.0005      # 0.05% за сторону; сверить с настройками песочницы
+  fee_maker: 0.0002      # не используется (лимитных ордеров нет)
+  slippage: 0.0002       # 0.02% за сторону, в неблагоприятную сторону
+
+account:
+  initial_equity: 10000
+  slot_fraction: 0.10          # 10% текущего equity на один слот (одну монету)
+  leverage: 1                  # суммарный |notional| <= equity
+  max_slots_portfolio: 10      # в портфельном режиме
+  min_target_change: 0.05      # изменения целевой позиции меньше — игнорируются
+  resize_on_equity_change: false  # позицию не пересчитываем только из-за изменения equity
+
+periods:
+  timezone: UTC
+  data_start: "2022-01-01"     # прогрев длинных окон (до 360 дней)
+  dev_start: "2023-01-01"
+  dev_end: "2025-12-31"
+  holdout_start: "2026-01-01"
+  holdout_end: null            # = дата запуска holdout, фиксируется при заморозке
+
+timeframes:
+  base: 1h                     # скачиваем только 1h, остальные собираем из него
+  derived: ["4h", "12h", "1d"]
+  execution: 1h                # сабчасовые проверки стопов идут по 1h-барам
+
+walk_forward:
+  scheme: anchored             # расширяющееся окно обучения
+  folds:
+    - {id: F1, train: ["2023-01-01", "2023-12-31"], test: ["2024-01-01", "2024-06-30"]}
+    - {id: F2, train: ["2023-01-01", "2024-06-30"], test: ["2024-07-01", "2024-12-31"]}
+    - {id: F3, train: ["2023-01-01", "2024-12-31"], test: ["2025-01-01", "2025-06-30"]}
+    - {id: F4, train: ["2023-01-01", "2025-06-30"], test: ["2025-07-01", "2025-12-31"]}
+
+selection:
+  objective: sharpe_daily            # Шарп портфеля по дневным доходностям на train
+  plateau_rule: neighbor_median      # выбираем устойчивое плато, а не пик (см. 04_OPTIMIZATION)
+  min_trades_train_portfolio: 30
+  coin_min_trades_train: 5
+  coin_min_sharpe_train: 0.0
+  min_coins_after_selection: 3
+  primary_rule:
+    min_wf_sharpe_gain_vs_v0: 0.3    # V1/V2 становится основным, только если обгоняет V0 на 0.3
+    min_folds_better: 3              # и лучше V0 минимум в 3 фолдах из 4
+
+metrics:
+  annualization_days: 365
+  risk_free: 0.0
+  random_baseline_seeds: 1000
+
+btc_filter:
+  symbol: BTCUSDT
+  sma_days: 50
+
+registry:
+  backend: mlflow                    # запасной вариант: reports/registry.csv
+  experiment_prefix: strategy_lab

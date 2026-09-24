@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.idea/
+
+# данные и артефакты прогонов — большие, легко пересобрать, не хранить в git
+data/
+mlruns/
+mlflow.db
+*.parquet
+
+# секреты
+.env
+*.egg-info/
