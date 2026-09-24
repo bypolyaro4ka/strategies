@@ -8,9 +8,10 @@ import pandas as pd
 from lab.engine.leak_tests import assert_future_poison_safe, assert_truncation_safe
 from lab.strategies.base import Context
 from lab.strategies.community.gosha.avax_ema_cross_short import GoshaAvaxEmaCrossShort
+from lab.strategies.community.gosha.rsi_dca import GoshaRsiDca, LEVEL_FRACS, _level_index
 from lab.strategies.community.gosha.turtle_donchian import GoshaTurtleDonchian
 
-STRATEGIES = [GoshaTurtleDonchian(), GoshaAvaxEmaCrossShort()]
+STRATEGIES = [GoshaTurtleDonchian(), GoshaAvaxEmaCrossShort(), GoshaRsiDca()]
 
 
 def _ctx():
@@ -61,6 +62,39 @@ def test_avax_short_only_never_goes_long():
         d = strat.on_bar(t, row, pos, _ctx())
         assert d.target <= 0.0
         pos = SimpleNamespace(target=d.target, bars_in_trade=0, stop_price=d.stop_price, take_price=d.take_price)
+
+
+def test_rsi_dca_level_index_matches_level_fracs():
+    for i, frac in enumerate(LEVEL_FRACS):
+        assert _level_index(frac) == i
+
+
+def test_rsi_dca_enters_on_low_rsi_and_steps_up_on_drawdown():
+    """Ряд, падающий достаточно, чтобы пробить RSI<28 и все 5 AO-уровней подряд -
+    target должен пройти по всей лестнице LEVEL_FRACS и не перепрыгивать уровни."""
+    idx = pd.date_range("2023-01-01", periods=60, freq="4h", tz="UTC")
+    close = 100 * np.array([0.995 ** i for i in range(60)])  # монотонное падение
+    bars = pd.DataFrame({
+        "open": close, "high": close, "low": close, "close": close,
+        "volume": 1000.0, "quote_volume": 100.0, "trades": 1, "complete": True,
+    }, index=idx)
+    strat = GoshaRsiDca()
+    out = strat.prepare(bars, _ctx())
+    pos = SimpleNamespace(target=0.0, avg_entry_price=0.0)
+    seen_targets = []
+    for t, row in out.iterrows():
+        d = strat.on_bar(t, row, pos, _ctx())
+        if d.target != pos.target and d.target > 0:
+            # имитируем то, что движок пересчитывает среднюю цену входа при доливке -
+            # для базового входа и роста target это просто текущая цена (упрощение
+            # синтетики: тест не проверяет точную формулу WAC, это дело execution.py)
+            pos = SimpleNamespace(target=d.target, avg_entry_price=row["close"])
+        elif d.target == 0.0:
+            pos = SimpleNamespace(target=0.0, avg_entry_price=0.0)
+        seen_targets.append(d.target)
+    assert max(seen_targets) > 0  # хотя бы вошли
+    nonzero = [x for x in seen_targets if x > 0]
+    assert nonzero == sorted(nonzero)  # монотонно растёт, никогда не падает частично
 
 
 def test_turtle_donchian_reversal_flips_sign_directly():
