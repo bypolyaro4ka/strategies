@@ -52,23 +52,32 @@ class GoshaTurtleDonchian(BaseStrategy):
 
         long_break, short_break = bool(row["long_break"]), bool(row["short_break"])
         close = row["close"]
+        side = pos.target
 
-        if pos.target > 0:
-            if close < row["exit_low"]:
-                return Decision(target=0.0, tag="10_bar_exit_channel")
+        # 10-барный выход проверяется первым (как у автора: `pos=None` в первом блоке).
+        # Важно: у автора это НЕ ранний return - следующий блок читает уже обновлённый
+        # pos, то есть выход и немедленный вход в другую сторону МОГУТ произойти в одном
+        # баре (через ветку `elif pos is None`). Ранний return здесь был бы багом порта -
+        # терял бы эту возможность разворота "выход+вход одним баром".
+        exited_this_bar = False
+        if side > 0 and close < row["exit_low"]:
+            side, exited_this_bar = 0.0, True
+        elif side < 0 and close > row["exit_high"]:
+            side, exited_this_bar = 0.0, True
+
+        if side > 0:
             if short_break:
                 return Decision(target=-1.0, tag="opposite_breakout_reverse")
-            return Decision(target=pos.target, tag="hold_long")
-
-        if pos.target < 0:
-            if close > row["exit_high"]:
-                return Decision(target=0.0, tag="10_bar_exit_channel")
+            return Decision(target=side, tag="hold_long")
+        if side < 0:
             if long_break:
                 return Decision(target=1.0, tag="opposite_breakout_reverse")
-            return Decision(target=pos.target, tag="hold_short")
+            return Decision(target=side, tag="hold_short")
 
+        # side == 0 здесь: либо уже была плоская позиция, либо только что вышли этим же
+        # баром - в обоих случаях автор тут же проверяет вход (третья ветка `elif pos is None`)
         if long_break:
             return Decision(target=1.0, tag="entry_long")
         if short_break:
             return Decision(target=-1.0, tag="entry_short")
-        return Decision(target=0.0, tag="flat")
+        return Decision(target=0.0, tag="10_bar_exit_channel" if exited_this_bar else "flat")
