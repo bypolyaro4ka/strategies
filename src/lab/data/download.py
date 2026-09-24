@@ -50,6 +50,27 @@ def load_universe_symbols() -> list[str]:
     return symbols
 
 
+def _request_with_retry(method: str, url: str, *, attempts: int = 4, **kwargs) -> requests.Response:
+    """requests.get/post с повторными попытками — сеть на 4.5 годах истории иногда
+    отваливается на секунду-две, из-за одного такого сбоя терять весь прогон (и всё,
+    что он успел скачать до этого) не стоит. Экспоненциальная пауза: 1с, 2с, 4с, 8с."""
+    last_error: requests.RequestException | None = None
+    for attempt in range(attempts):
+        try:
+            return requests.request(method, url, **kwargs)
+        except requests.RequestException as e:
+            last_error = e
+            if attempt < attempts - 1:
+                time.sleep(2 ** attempt)
+    raise last_error  # после всех попыток - отдаём вызывающему коду, пусть решает
+
+
+def _period_of(ts: pd.Timestamp) -> pd.Period:
+    """pd.Period не умеет хранить часовой пояс — берём только 'YYYY-MM' из tz-aware
+    метки, не через ts.to_period() (тот при конвертации сам ругается предупреждением)."""
+    return pd.Period(ts.strftime("%Y-%m"), freq="M")
+
+
 def _looks_like_header(first_column_name: object) -> bool:
     """Заголовок Binance vision состоит из букв ("open_time"). Если вместо этого
     там число — значит заголовка в файле не было, и первая строка данных случайно
@@ -65,7 +86,7 @@ def _download_zip_csv(url: str, columns: list[str]) -> pd.DataFrame | None:
     """Скачивает .zip с одним .csv внутри и возвращает DataFrame с колонками columns.
     None, если файла с таким именем нет на сервере (404) — например, месяц до листинга
     монеты или ещё не наступил."""
-    resp = requests.get(url, timeout=60)
+    resp = _request_with_retry("get", url, timeout=60)
     if resp.status_code == 404:
         return None
     resp.raise_for_status()
@@ -104,7 +125,7 @@ def funding_raw_to_df(raw: pd.DataFrame) -> pd.DataFrame:
 
 
 def _month_periods(start: pd.Timestamp, end: pd.Timestamp) -> list[pd.Period]:
-    return list(pd.period_range(start.to_period("M"), end.to_period("M"), freq="M"))
+    return list(pd.period_range(_period_of(start), _period_of(end), freq="M"))
 
 
 def fetch_klines_rest(symbol: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
@@ -116,8 +137,8 @@ def fetch_klines_rest(symbol: str, start: pd.Timestamp, end: pd.Timestamp) -> pd
     cursor_ms = int(start.timestamp() * 1000)
     end_ms = int(end.timestamp() * 1000)
     while cursor_ms < end_ms:
-        resp = requests.get(
-            f"{REST_BASE}/fapi/v1/klines",
+        resp = _request_with_retry(
+            "get", f"{REST_BASE}/fapi/v1/klines",
             params={"symbol": symbol, "interval": "1h", "startTime": cursor_ms, "limit": 1500},
             timeout=30,
         )
@@ -143,43 +164,51 @@ def download_symbol_klines(symbol: str, start: pd.Timestamp, end: pd.Timestamp) 
     out_dir = RAW_DIR / symbol / "1h"
     out_dir.mkdir(parents=True, exist_ok=True)
     now = pd.Timestamp.now(tz="UTC")
-    current_month = now.to_period("M")
+    current_month = _period_of(now)
 
     for period in _month_periods(start, end):
         dest = out_dir / f"{period}.parquet"
         if dest.exists():
             continue
 
-        if period < current_month:
-            raw = _download_zip_csv(
-                f"{VISION_BASE}/monthly/klines/{symbol}/1h/{symbol}-1h-{period}.zip", KLINES_COLUMNS
-            )
-            if raw is None:
-                print(f"  [klines] {symbol} {period}: архива нет (до листинга?), пропуск")
-                continue
-            df = klines_raw_to_df(raw)
-        else:
-            # текущий месяц не выложен целиком - собираем из дневных архивов + REST-хвост
-            month_start = max(period.start_time.tz_localize("UTC"), start)
-            frames = []
-            for day in pd.date_range(month_start, min(end, now), freq="D"):
+        try:
+            if period < current_month:
                 raw = _download_zip_csv(
-                    f"{VISION_BASE}/daily/klines/{symbol}/1h/{symbol}-1h-{day:%Y-%m-%d}.zip",
-                    KLINES_COLUMNS,
+                    f"{VISION_BASE}/monthly/klines/{symbol}/1h/{symbol}-1h-{period}.zip", KLINES_COLUMNS
                 )
-                if raw is not None:
-                    frames.append(klines_raw_to_df(raw))
-            covered_until = max((f.index.max() for f in frames), default=month_start - pd.Timedelta(hours=1))
-            if covered_until < min(end, now):
-                try:
-                    frames.append(fetch_klines_rest(symbol, covered_until + pd.Timedelta(hours=1), min(end, now)))
-                except requests.RequestException as e:
-                    print(f"  [klines] {symbol} {period}: REST-хвост недоступен ({e}), докачаем в следующий раз")
-            if not frames:
-                print(f"  [klines] {symbol} {period}: данных пока нет, пропуск")
-                continue
-            df = pd.concat(frames).sort_index()
-            df = df[~df.index.duplicated(keep="last")]
+                if raw is None:
+                    print(f"  [klines] {symbol} {period}: архива нет (до листинга?), пропуск")
+                    continue
+                df = klines_raw_to_df(raw)
+            else:
+                # текущий месяц не выложен целиком - собираем из дневных архивов + REST-хвост
+                month_start = max(pd.Timestamp(f"{period}-01", tz="UTC"), start)
+                frames = []
+                for day in pd.date_range(month_start, min(end, now), freq="D"):
+                    raw = _download_zip_csv(
+                        f"{VISION_BASE}/daily/klines/{symbol}/1h/{symbol}-1h-{day:%Y-%m-%d}.zip",
+                        KLINES_COLUMNS,
+                    )
+                    if raw is not None:
+                        frames.append(klines_raw_to_df(raw))
+                covered_until = max(
+                    (f.index.max() for f in frames), default=month_start - pd.Timedelta(hours=1)
+                )
+                if covered_until < min(end, now):
+                    try:
+                        frames.append(
+                            fetch_klines_rest(symbol, covered_until + pd.Timedelta(hours=1), min(end, now))
+                        )
+                    except requests.RequestException as e:
+                        print(f"  [klines] {symbol} {period}: REST-хвост недоступен ({e}), докачаем в следующий раз")
+                if not frames:
+                    print(f"  [klines] {symbol} {period}: данных пока нет, пропуск")
+                    continue
+                df = pd.concat(frames).sort_index()
+                df = df[~df.index.duplicated(keep="last")]
+        except requests.RequestException as e:
+            print(f"  [klines] {symbol} {period}: сеть не ответила ({e}), пропуск - докачается при повторном запуске")
+            continue
 
         df.to_parquet(dest)
         print(f"  [klines] {symbol} {period}: {len(df)} баров")
@@ -190,31 +219,31 @@ def download_symbol_funding(symbol: str, start: pd.Timestamp, end: pd.Timestamp)
     out_dir = RAW_DIR / symbol / "funding"
     out_dir.mkdir(parents=True, exist_ok=True)
     now = pd.Timestamp.now(tz="UTC")
-    current_month = now.to_period("M")
+    current_month = _period_of(now)
 
     for period in _month_periods(start, end):
         dest = out_dir / f"{period}.parquet"
         if dest.exists():
             continue
 
-        if period < current_month:
-            raw = _download_zip_csv(
-                f"{VISION_BASE}/monthly/fundingRate/{symbol}/{symbol}-fundingRate-{period}.zip",
-                FUNDING_COLUMNS,
-            )
-            if raw is None:
-                print(f"  [funding] {symbol} {period}: архива нет, пропуск")
-                continue
-            df = funding_raw_to_df(raw)
-        else:
-            month_start = max(period.start_time.tz_localize("UTC"), start)
-            try:
+        try:
+            if period < current_month:
+                raw = _download_zip_csv(
+                    f"{VISION_BASE}/monthly/fundingRate/{symbol}/{symbol}-fundingRate-{period}.zip",
+                    FUNDING_COLUMNS,
+                )
+                if raw is None:
+                    print(f"  [funding] {symbol} {period}: архива нет, пропуск")
+                    continue
+                df = funding_raw_to_df(raw)
+            else:
+                month_start = max(pd.Timestamp(f"{period}-01", tz="UTC"), start)
                 rows = []
                 cursor_ms = int(month_start.timestamp() * 1000)
                 end_ms = int(min(end, now).timestamp() * 1000)
                 while cursor_ms < end_ms:
-                    resp = requests.get(
-                        f"{REST_BASE}/fapi/v1/fundingRate",
+                    resp = _request_with_retry(
+                        "get", f"{REST_BASE}/fapi/v1/fundingRate",
                         params={"symbol": symbol, "startTime": cursor_ms, "limit": 1000},
                         timeout=30,
                     )
@@ -236,9 +265,9 @@ def download_symbol_funding(symbol: str, start: pd.Timestamp, end: pd.Timestamp)
                      "last_funding_rate": [r["fundingRate"] for r in rows]}
                 )
                 df = funding_raw_to_df(raw)
-            except requests.RequestException as e:
-                print(f"  [funding] {symbol} {period}: REST недоступен ({e}), докачаем в следующий раз")
-                continue
+        except requests.RequestException as e:
+            print(f"  [funding] {symbol} {period}: сеть не ответила ({e}), пропуск - докачается при повторном запуске")
+            continue
 
         df.to_parquet(dest)
         print(f"  [funding] {symbol} {period}: {len(df)} отметок")
@@ -281,7 +310,11 @@ def main() -> None:
         download_symbol_funding(symbol, start, end)
         assemble_symbol(symbol)
 
-    print("\nГотово. Дальше: python -m lab.data.resample")
+    print(
+        "\nГотово (месяцы с сетевыми сбоями, если были, отмечены выше как 'пропуск' — "
+        "запустите эту же команду ещё раз, идемпотентность докачает только их)."
+        "\nДальше: python -m lab.data.resample"
+    )
 
 
 if __name__ == "__main__":
