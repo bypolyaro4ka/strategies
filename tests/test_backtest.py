@@ -109,6 +109,21 @@ def test_future_poison_safe_on_rolling_mean_stub():
     assert_future_poison_safe(strategy, bars, _ctx(_cfg()), n_checks=30)
 
 
+# --- Позиция, ещё открытая на конец периода, попадает в trades снимком ---
+
+def test_open_position_at_end_is_captured_as_snapshot():
+    bars = _flat_bars(72)  # AlwaysLong открывает на день 2 и держит до конца данных
+    cfg = _cfg()
+    result = run_backtest(
+        AlwaysLongStub(), {"X": bars}, {"X": _signal_bars(bars)}, {}, "1d", cfg, 10_000, 1,
+    )
+    assert len(result.trades) == 1
+    t = result.trades[0]
+    assert t.exit_time is None
+    assert t.exit_reason == "open_at_end"
+    assert t.gross_pnl > 0  # цена росла, позиция в плюсе
+
+
 # --- Slot contention через весь цикл (не только изолированная allocate_slots) ---
 
 def test_slot_contention_through_full_loop():

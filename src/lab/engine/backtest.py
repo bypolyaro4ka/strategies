@@ -266,6 +266,21 @@ def run_backtest(
                 continue  # слота не хватило - сигнал в этом баре не исполняется
             pending[s] = decision
 
+    # Позиции, ещё открытые на конец периода, не "закрытая сделка" (Trades в метриках их
+    # не считает), но комиссии/фандинг по ним уже реально потрачены/получены - фиксируем
+    # снимком по последней цене, иначе метрики издержек их бы просто потеряли.
+    for s in symbols:
+        if open_trade[s] is not None and positions[s].is_open:
+            pos = positions[s]
+            last_close = bars_1h[s]["close"].iloc[-1]
+            t = open_trade[s]
+            t.exit_time = None
+            t.exit_price = last_close
+            t.gross_pnl = pos.qty * (last_close - pos.avg_entry_price)
+            t.net_pnl = t.gross_pnl - t.fees + t.funding
+            t.exit_reason = "open_at_end"
+            trades.append(t)
+
     equity = pd.Series(dict(equity_points))
     equity.index.name = "time"
     return BacktestResult(equity=equity, trades=trades, orders=orders)
