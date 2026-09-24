@@ -23,6 +23,15 @@ def fee_amount(delta_notional: float, fee_taker: float) -> float:
     return abs(delta_notional) * fee_taker
 
 
+def slippage_cost(abs_qty: float, fill_price: float, slippage: float) -> float:
+    """Сколько именно "стоило" проскальзывание на этом исполнении — отдельно от комиссии,
+    для разбивки издержек в trades.csv (02_ENGINE_SPEC.md, раздел 5) и Cost share
+    (01_PROTOCOL.md, раздел 8). fill_price уже включает проскальзывание (см. fill_price()
+    выше); берём его как базу для расчёта — при slippage=0.02% разница с "чистой" ценой
+    открытия на порядок меньше самого проскальзывания, ей пренебрегаем."""
+    return abs(abs_qty) * fill_price * slippage
+
+
 def funding_payment(position_qty: float, mark_price: float, funding_rate: float) -> float:
     """Знак результата: отрицательный — мы платим, положительный — мы получаем.
 

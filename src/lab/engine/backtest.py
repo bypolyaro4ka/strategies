@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from lab.engine.costs import fee_amount, fill_price, funding_payment
+from lab.engine.costs import fee_amount, fill_price, funding_payment, slippage_cost
 from lab.engine.execution import (
     adjust_position,
     apply_leverage_cap,
@@ -55,6 +55,7 @@ class Trade:
     exit_price: float | None = None
     gross_pnl: float = 0.0
     fees: float = 0.0
+    slippage_cost: float = 0.0
     funding: float = 0.0
     net_pnl: float = 0.0
     exit_reason: str = ""
@@ -69,6 +70,7 @@ class Order:
     fill_price: float
     delta_qty: float
     fee: float
+    slippage_cost: float
     reason: str  # "signal" | "stop" | "take" | "liquidation"
 
 
@@ -79,11 +81,17 @@ class BacktestResult:
     orders: list[Order] = field(default_factory=list)
 
 
-def _close_trade(trade: Trade, t: pd.Timestamp, price: float, realized: float, fee: float, reason: str) -> None:
+def _close_trade(trade: Trade, t: pd.Timestamp, price: float, realized: float, fee: float, slip: float, reason: str) -> None:
+    """gross_pnl считается по РЕАЛЬНЫМ ценам исполнения (то есть уже с учётом
+    проскальзывания — оно ценовой эффект, а не отдельно вычитаемая статья, как комиссия).
+    slippage_cost хранится отдельно только как диагностика для Cost share
+    (01_PROTOCOL.md §8: (комиссии+проскальзывание+фандинг)/валовая прибыль) — его не нужно
+    вычитать из net_pnl ещё раз, иначе посчитали бы дважды."""
     trade.exit_time = t
     trade.exit_price = price
     trade.gross_pnl = realized
     trade.fees += fee
+    trade.slippage_cost += slip
     trade.net_pnl = trade.gross_pnl - trade.fees + trade.funding
     trade.exit_reason = reason
 
@@ -150,13 +158,14 @@ def run_backtest(
 
             delta_qty = -pos.qty
             fee = fee_amount(delta_qty * exit_price, fee_taker)
+            slip = slippage_cost(delta_qty, exit_price, slippage)
             qty_new, avg_new, realized = adjust_position(pos.qty, pos.avg_entry_price, delta_qty, exit_price)
             cash_equity += realized - fee
             if open_trade[s] is not None:
-                _close_trade(open_trade[s], h, exit_price, realized, fee, reason)
+                _close_trade(open_trade[s], h, exit_price, realized, fee, slip, reason)
                 trades.append(open_trade[s])
                 open_trade[s] = None
-            orders.append(Order(s, h, pos.target, 0.0, exit_price, delta_qty, fee, reason))
+            orders.append(Order(s, h, pos.target, 0.0, exit_price, delta_qty, fee, slip, reason))
             pos.qty, pos.avg_entry_price, pos.bars_in_trade = qty_new, avg_new, 0
             pos.target = 0.0
             pos.stop_price = pos.take_price = pos.time_stop_bars = None
@@ -192,6 +201,7 @@ def run_backtest(
             qty_target = capped_notional / px if px else 0.0
             delta_qty = qty_target - pos.qty
             fee = fee_amount(delta_qty * px, fee_taker)
+            slip = slippage_cost(delta_qty, px, slippage)
             qty_new, avg_new, realized = adjust_position(pos.qty, pos.avg_entry_price, delta_qty, px)
             cash_equity += realized - fee
 
@@ -199,14 +209,15 @@ def run_backtest(
             if was_flat and qty_new != 0:
                 open_trade[s] = Trade(
                     symbol=s, side="long" if qty_new > 0 else "short",
-                    entry_time=h, entry_price=px, qty=abs(qty_new),
+                    entry_time=h, entry_price=px, qty=abs(qty_new), slippage_cost=slip,
                 )
             elif qty_new == 0 and open_trade[s] is not None:
-                _close_trade(open_trade[s], h, px, realized, fee, "exit_signal")
+                _close_trade(open_trade[s], h, px, realized, fee, slip, "exit_signal")
                 trades.append(open_trade[s])
                 open_trade[s] = None
             elif open_trade[s] is not None:
                 open_trade[s].fees += fee  # доливка/сокращение - та же сделка продолжается
+                open_trade[s].slippage_cost += slip
 
             pos.qty, pos.avg_entry_price = qty_new, avg_new
             pos.target = decision.target
@@ -216,7 +227,7 @@ def run_backtest(
             pos.stop_price = decision.stop_price
             pos.take_price = decision.take_price
             pos.time_stop_bars = decision.time_stop_bars
-            orders.append(Order(s, h, pos.target, decision.target, px, delta_qty, fee, "signal"))
+            orders.append(Order(s, h, pos.target, decision.target, px, delta_qty, fee, slip, "signal"))
 
         # --- шаг 4: equity по close(h) ---
         unrealized = sum(

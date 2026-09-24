@@ -5,7 +5,7 @@
 
 import pytest
 
-from lab.engine.costs import fee_amount, fill_price, funding_payment
+from lab.engine.costs import fee_amount, fill_price, funding_payment, slippage_cost
 
 
 def test_fill_price_buy_and_sell():
@@ -64,6 +64,11 @@ def test_costs_toy_manual_numbers():
     gross_pnl = exit_notional - 1000.0
     net_pnl = gross_pnl - entry_fee - exit_fee
     assert net_pnl == pytest.approx(gross_pnl - entry_fee - exit_fee)
+
+
+def test_slippage_cost_formula():
+    assert slippage_cost(abs_qty=10, fill_price=100, slippage=0.0002) == pytest.approx(0.2)
+    assert slippage_cost(abs_qty=-10, fill_price=100, slippage=0.0002) == pytest.approx(0.2)  # знак не важен
 
 
 def test_funding_sign_long_pays_when_rate_positive():

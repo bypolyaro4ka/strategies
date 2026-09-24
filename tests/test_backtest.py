@@ -134,4 +134,5 @@ def test_even_day_strategy_produces_trades_with_costs():
     assert len(result.trades) >= 1
     for trade in result.trades:
         assert trade.fees > 0  # издержки реально списались
+        assert trade.slippage_cost > 0  # и проскальзывание учтено отдельной строкой
         assert trade.exit_reason == "exit_signal"
