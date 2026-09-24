@@ -5,7 +5,7 @@
 
 ## 1. Стек
 
-- Python 3.11+, pandas, numpy, pyarrow (parquet), pyyaml, matplotlib, mlflow, pytest.
+- Python 3.11+, pandas, numpy, pyarrow (parquet), pyyaml, matplotlib, pytest.
 - Опционально для скорости: numba (цикл движка), joblib (параллельные прогоны оптимизации).
 - Локально достаточно MacBook; оптимизацию (Этап 7) можно гонять на Linux-сервере — GPU не нужен.
 
@@ -178,19 +178,33 @@ notional  = target * slot_fraction * equity_at_decision
 | `metrics.json` | метрики из `01_PROTOCOL`, раздел 8 |
 | `run_meta.json` | strategy id/version, params, tf, symbols, period, fold, variant, git commit, hash данных |
 
-## 6. Реестр испытаний (MLflow)
+## 6. Реестр испытаний (`reports/registry.csv`)
 
-Каждый прогон — MLflow run:
+Без MLflow: не нужен сервер, БД или UI — только неизменяемый журнал прогонов для подсчёта
+числа испытаний (это то, что защищает DSR и лидерборд от подгонки задним числом, см.
+`01_PROTOCOL.md` §9), плюс путь к артефактам конкретного прогона.
 
-- **params:** все параметры стратегии, tf, symbols, period, variant (V0/V1/V2), fold.
-- **metrics:** всё из `metrics.json`.
-- **artifacts:** trades.csv, equity.parquet, график equity.
-- **tags:** `strategy_id`, `strategy_version`, `stage` (dev/wf/holdout), `mode` (pair/portfolio),
-  `debug` (true/false), `git_commit`, `data_hash`, `author` (для стратегий друзей).
-- Эксперименты: `strategy_lab/dev`, `strategy_lab/wf`, `strategy_lab/holdout`.
+`src/lab/registry.py`, функция `log_run(...)`: **только дописывает** одну строку в
+`reports/registry.csv` (создаёт файл с заголовком при первом запуске). Никогда не читает файл
+целиком, чтобы переписать, не сортирует и не дедуплицирует существующие строки — это и есть
+гарантия «испытания нельзя удалить или скрыть» (`CLAUDE.md`, правило 3) на уровне кода,
+а не только на уровне договорённости.
 
-Функция `count_trials(strategy_id, stage)` должна возвращать число недебажных испытаний —
-оно нужно для DSR. Если MLflow недоступен — дублирующая запись в `reports/registry.csv`.
+Колонки:
+
+- `run_id, timestamp_utc` — уникальный идентификатор и момент запуска;
+- `strategy_id, strategy_version, variant` (V0/V1/V2/community), `mode` (pair/portfolio),
+  `tf, symbols` (через `;`), `period_start, period_end, fold`;
+- `stage` (dev/wf/holdout), `debug` (true/false), `git_commit, data_hash, author`
+  (для стратегий друзей);
+- `params_json` — параметры стратегии одной JSON-строкой;
+- все метрики из `metrics.json` отдельными колонками (`sharpe`, `dsr`, `maxdd`, `trades`, ...);
+- `artifacts_path` — куда сложены `trades.csv`, `orders.csv`, `equity.parquet`, график
+  (`reports/<stage>/<run_id>/`, см. раздел 5).
+
+Функция `count_trials(strategy_id, stage)` в `metrics/dsr.py` — просто
+`registry[(registry.strategy_id == strategy_id) & (registry.stage == stage) & ~registry.debug]`,
+без похода во внешнюю систему.
 
 ## 7. Тесты (обязательны до первого реального прогона)
 
@@ -210,6 +224,7 @@ notional  = target * slot_fraction * equity_at_decision
 | Benchmark sanity | Buy&Hold без издержек совпадает с ценой; Flat = 0 | интеграционный |
 | Slot contention | Сигналов на вход больше, чем свободных слотов → открытые позиции сохраняются, новые заполняют слоты по алфавиту символа, остальные пропускаются (01_PROTOCOL 5.5) | юнит |
 | Date-leak grep | Ни в одном файле `src/lab/strategies/**/*.py` (включая `community/`) нет литералов дат `2026-*` и `holdout` в захардкоженном виде | статический, обязателен для каждой стратегии, включая стратегии друзей |
+| Registry append-only | `log_run()` только добавляет строку в `registry.csv`; существующие строки после вызова побайтово не изменились | юнит |
 
 Покрытие: 100% для `engine/costs.py`, `engine/execution.py`, `data/loader.py`.
 Для стратегий — truncation + future-poison + date-leak grep + 2–3 ручных сценария на

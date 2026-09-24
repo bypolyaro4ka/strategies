@@ -64,5 +64,5 @@ btc_filter:
   sma_days: 50
 
 registry:
-  backend: mlflow                    # запасной вариант: reports/registry.csv
-  experiment_prefix: strategy_lab
+  backend: csv                       # append-only reports/registry.csv, без внешних сервисов
+  experiment_prefix: strategy_lab    # префикс run_id, для дальнейшего поиска/фильтрации

@@ -29,7 +29,7 @@
    в загрузчик данных (`02_ENGINE_SPEC.md`, раздел 2.4) — не обходить её.
 2. **Никаких решений по данным holdout.** Параметры, монеты, ТФ, фильтры, варианты стратегий
    выбираются только на dev-периоде 2023–2025 по процедуре из `04_OPTIMIZATION.md`.
-3. **Каждый прогон логируется** в реестр испытаний (MLflow), включая неудачные и отладочные
+3. **Каждый прогон логируется** в реестр испытаний (`reports/registry.csv`), включая неудачные и отладочные
    после того, как код стратегии прошёл тесты. Удалять записи запрещено — от их числа
    зависит поправка на множественное тестирование.
 4. **Константы — только из `config/protocol.yaml`.** Никакого хардкода комиссий, дат, размеров.
@@ -72,6 +72,8 @@ strategy_lab/
 │   ├── processed/             # parquet: {SYMBOL}_{tf}.parquet, {SYMBOL}_funding.parquet (только dev-диапазон)
 │   └── processed/_holdout_locked/  # бары с 2026-01-01 — физически отдельно, см. 05_PLAN Этап 2
 ├── src/lab/
+│   ├── config.py               # загрузка/валидация protocol.yaml
+│   ├── registry.py             # append-only реестр испытаний, count_trials()
 │   ├── data/                  # download.py, validate.py, resample.py, loader.py
 │   ├── engine/                # backtest.py, execution.py, costs.py, portfolio.py
 │   ├── strategies/            # base.py, s01_*.py … s13_*.py, overlays.py
@@ -82,6 +84,7 @@ strategy_lab/
 │   └── report/                # make_report.py
 ├── tests/
 ├── reports/
+│   ├── registry.csv           # реестр всех испытаний (append-only), см. 02_ENGINE_SPEC §6
 │   ├── data_quality/
 │   ├── dev/                   # прогоны с дефолтами на 2023–2025
 │   ├── wf/                    # walk-forward оптимизация
