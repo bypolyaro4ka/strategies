@@ -53,8 +53,13 @@ class S12(BaseStrategy):
         f["z"] = (f["f8"] - f8_mean) / f8_std
 
         close_times = out.index + pd.Timedelta(hours=BAR_HOURS)
+        # merge_asof требует одинаковую точность datetime64 у обеих сторон - bars и
+        # funding приходят из разных parquet-файлов и могут не совпадать по unit
+        # (us/ms/ns), даже если оба tz-aware UTC (реальная причина падения на pandas 3.0).
+        left = pd.DataFrame(index=pd.DatetimeIndex(close_times).as_unit("us"))
+        right = f[["f8", "z"]].set_axis(f.index.as_unit("us"))
         merged = pd.merge_asof(
-            pd.DataFrame(index=close_times), f[["f8", "z"]],
+            left, right,
             left_index=True, right_index=True, direction="backward", allow_exact_matches=False,
         )
         out["f8"] = merged["f8"].to_numpy()

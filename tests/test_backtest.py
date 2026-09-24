@@ -165,9 +165,13 @@ def test_reversal_splits_into_two_closed_trades():
 def test_portfolio_strategy_ranks_across_all_symbols():
     n = 72
     idx = pd.date_range("2023-01-01", periods=n, freq="1h", tz="UTC")
+    # PortfolioTopBottomStub ранжирует по АБСОЛЮТНОМУ close (не по доходности) - все три
+    # должны стартовать с одного уровня, иначе "падающая, но всё ещё дороже" монета
+    # (например, старт с 200 и спад) останется лидером по close всю дистанцию - именно
+    # так ловится первая версия этого теста.
     flat = pd.Series([100.0] * n, index=idx)
     up = pd.Series([100.0 + i * 0.2 for i in range(n)], index=idx)  # растёт - должен стать лонгом
-    down = pd.Series([200.0 - i * 0.2 for i in range(n)], index=idx)  # падает - должен стать шортом
+    down = pd.Series([100.0 - i * 0.2 for i in range(n)], index=idx)  # падает - должен стать шортом
     bars = {}
     for sym, series in (("AAA", flat), ("BBB", up), ("CCC", down)):
         bars[sym] = pd.DataFrame({
