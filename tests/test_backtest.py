@@ -160,6 +160,32 @@ def test_reversal_splits_into_two_closed_trades():
     assert len(set(sides)) == 2
 
 
+# --- signals_start (Этап 7, walk-forward test-окно "с нуля") ---
+
+def test_signals_start_keeps_position_flat_until_then():
+    bars = _flat_bars(96)  # 4 дня
+    cfg = _cfg()
+    signals_start = bars.index[48]  # ровно середина - позиция не должна открыться раньше
+    result = run_backtest(
+        AlwaysLongStub(), {"X": bars}, {"X": _signal_bars(bars)}, {}, "1d", cfg, 10_000, 1,
+        signals_start=signals_start,
+    )
+    entries_before = [o for o in result.orders if o.reason == "signal" and o.time < signals_start]
+    assert entries_before == []
+    entries_after = [o for o in result.orders if o.reason == "signal" and o.time >= signals_start]
+    assert len(entries_after) >= 1  # после signals_start AlwaysLong всё равно входит
+
+
+def test_signals_start_none_matches_previous_behavior():
+    bars = _flat_bars(72)
+    cfg = _cfg()
+    r_default = run_backtest(AlwaysLongStub(), {"X": bars}, {"X": _signal_bars(bars)}, {}, "1d", cfg, 10_000, 1)
+    r_explicit_none = run_backtest(
+        AlwaysLongStub(), {"X": bars}, {"X": _signal_bars(bars)}, {}, "1d", cfg, 10_000, 1, signals_start=None,
+    )
+    pd.testing.assert_series_equal(r_default.equity, r_explicit_none.equity)
+
+
 # --- PortfolioStrategy (S13) - движок должен уметь звать on_bar() со всеми монетами сразу ---
 
 def test_portfolio_strategy_ranks_across_all_symbols():

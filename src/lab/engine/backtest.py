@@ -106,6 +106,7 @@ def run_backtest(
     equity0: float,
     max_slots: int,
     btc_bars: pd.DataFrame | None = None,
+    signals_start: pd.Timestamp | None = None,
 ) -> BacktestResult:
     """
     bars_1h — 1h-бары по каждому символу (для исполнения/стопов/фандинга/equity).
@@ -114,6 +115,12 @@ def run_backtest(
     funding — история фандинга по каждому символу, индекс funding_time.
     max_slots — для режима «пара» передавайте len(bars_1h) (обычно 1) — конкуренции
         просто не возникнет, т. к. кандидат на слот всегда один.
+    signals_start — до этого момента стратегия не получает сигнальных решений вообще
+        (позиции гарантированно остаются плоскими), хотя `prepare()`/индикаторы уже
+        видят все бары с самого начала. Нужно для walk-forward (04_OPTIMIZATION.md §4):
+        test-окно должно начинаться "с нуля" (без унаследованных из train позиций), но
+        с прогретыми индикаторами (прогрев — это прошлое, не подглядывание). None (по
+        умолчанию) — прежнее поведение, решения генерируются с самого первого бара.
     """
     symbols = list(bars_1h.keys())
     slot_fraction = protocol_cfg.account.slot_fraction
@@ -266,7 +273,9 @@ def run_backtest(
         # Остальная часть шага 5 (min_target_change, слоты) - буквально та же логика,
         # что и для обычной BaseStrategy, разница только в том, как получен `decisions`.
         decisions = {}
-        if is_portfolio_strategy:
+        if signals_start is not None and h < signals_start:
+            pass  # решения не генерируются - позиции гарантированно остаются плоскими
+        elif is_portfolio_strategy:
             eligible_rows, eligible_positions = {}, {}
             s_open = signal_open_for_close(h, tf)
             for s in rows:
