@@ -6,6 +6,7 @@
 import pytest
 
 from lab.engine.execution import (
+    adjust_position,
     apply_leverage_cap,
     check_stop_take,
     is_short_liquidated,
@@ -111,6 +112,54 @@ def test_leverage_cap_no_room_left():
     notional, cut = apply_leverage_cap(desired_notional=100, other_symbols_notional_abs_sum=1000, equity=1000)
     assert notional == 0
     assert cut is True
+
+
+# --- adjust_position: доливки/сокращения/разворот ---
+
+def test_adjust_position_noop_when_flat_and_zero_delta():
+    qty, avg_entry, realized = adjust_position(qty_old=0, avg_entry_old=0, delta_qty=0, fill_price=100)
+    assert (qty, avg_entry, realized) == (0.0, 0.0, 0.0)
+
+
+def test_adjust_position_opens_from_flat():
+    qty, avg_entry, realized = adjust_position(qty_old=0, avg_entry_old=0, delta_qty=10, fill_price=100)
+    assert qty == 10
+    assert avg_entry == 100
+    assert realized == 0
+
+
+def test_adjust_position_adds_same_direction_weighted_average():
+    qty, avg_entry, realized = adjust_position(qty_old=10, avg_entry_old=100, delta_qty=10, fill_price=120)
+    assert qty == 20
+    assert avg_entry == pytest.approx(110)  # (10*100 + 10*120) / 20
+    assert realized == 0
+
+
+def test_adjust_position_partial_reduce_keeps_avg_entry():
+    qty, avg_entry, realized = adjust_position(qty_old=10, avg_entry_old=100, delta_qty=-4, fill_price=120)
+    assert qty == 6
+    assert avg_entry == 100  # у оставшейся части цена входа не меняется
+    assert realized == pytest.approx(4 * (120 - 100))  # реализован PnL по закрытой части
+
+
+def test_adjust_position_full_close():
+    qty, avg_entry, realized = adjust_position(qty_old=10, avg_entry_old=100, delta_qty=-10, fill_price=90)
+    assert qty == 0
+    assert realized == pytest.approx(10 * (90 - 100))
+
+
+def test_adjust_position_flip_long_to_short():
+    qty, avg_entry, realized = adjust_position(qty_old=10, avg_entry_old=100, delta_qty=-15, fill_price=90)
+    assert qty == -5
+    assert avg_entry == 90  # новая (короткая) позиция открыта по цене исполнения
+    assert realized == pytest.approx(10 * (90 - 100))  # PnL реализован только по закрытой части лонга
+
+
+def test_adjust_position_short_side_pnl_sign():
+    # шорт: закрытие (покупка) дешевле входа - прибыль
+    qty, avg_entry, realized = adjust_position(qty_old=-10, avg_entry_old=100, delta_qty=10, fill_price=80)
+    assert qty == 0
+    assert realized == pytest.approx(200)  # (100 - 80) * 10
 
 
 # --- target_notional ---

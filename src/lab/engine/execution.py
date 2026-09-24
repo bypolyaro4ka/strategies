@@ -78,6 +78,33 @@ def apply_leverage_cap(desired_notional: float, other_symbols_notional_abs_sum: 
     return sign * available, True
 
 
+def adjust_position(qty_old: float, avg_entry_old: float, delta_qty: float, fill_price: float) -> tuple[float, float, float]:
+    """Пересчёт позиции при доливке/сокращении/развороте (01_PROTOCOL.md, 5.5: частичные
+    изменения target — это доливки/сокращения). Возвращает (qty_new, avg_entry_new,
+    realized_pnl_этой_сделки).
+
+    Два случая:
+    - delta_qty того же знака, что и qty_old (или qty_old == 0) — позиция растёт в ту же
+      сторону; PnL не реализуется, средняя цена входа пересчитывается взвешенно.
+    - знак противоположный — сначала закрывается (полностью или частично) существующая
+      позиция, реализуя PnL по среднему входу; если |delta_qty| больше |qty_old|, остаток
+      открывает новую позицию в другую сторону по цене исполнения.
+    """
+    qty_new = qty_old + delta_qty
+
+    if qty_old == 0 or (delta_qty > 0) == (qty_old > 0):
+        if qty_new == 0:
+            return 0.0, 0.0, 0.0
+        avg_entry_new = (qty_old * avg_entry_old + delta_qty * fill_price) / qty_new
+        return qty_new, avg_entry_new, 0.0
+
+    sign_old = 1.0 if qty_old > 0 else -1.0
+    closing_qty = min(abs(delta_qty), abs(qty_old))
+    realized_pnl = closing_qty * sign_old * (fill_price - avg_entry_old)
+    avg_entry_new = avg_entry_old if abs(delta_qty) <= abs(qty_old) else fill_price
+    return qty_new, avg_entry_new, realized_pnl
+
+
 def passes_min_change(new_target: float, old_target: float, min_target_change: float) -> bool:
     """Изменения |Δtarget| < min_target_change игнорируются — защита от микросделок
     (01_PROTOCOL.md, 5.5). Маленький допуск (1e-9) — граница часто попадает на "круглые"
