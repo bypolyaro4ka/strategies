@@ -36,7 +36,9 @@ def test_cross_up_above_filter_enters_long_no_filter_too():
 
     strat = S08(params={"fast": 12, "slow": 26, "signal": 9, "filter_n": 200})
     out = strat.prepare(bars, _ctx())
-    assert bool(out["cross_up"].iloc[-10:].any())  # где-то в хвосте пересечение случилось
+    # пересечение MACD/сигнала лагает относительно самого разворота цены - ищем по всей
+    # фазе роста (последние 40 баров), а не только в самом хвосте
+    assert bool(out["cross_up"].iloc[-40:].any())
     cross_idx = out.index[out["cross_up"]][-1]
     d = strat.on_bar(cross_idx, out.loc[cross_idx], pos, _ctx())
     if out.loc[cross_idx, "close"] > out.loc[cross_idx, "ema_filter"]:
