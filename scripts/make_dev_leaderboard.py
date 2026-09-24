@@ -48,6 +48,11 @@ def main():
         df[c] = pd.to_numeric(df[c], errors="coerce")
 
     df["warn"] = df["strategy_id"].str.startswith("COMM_").map({True: "⚠ видела holdout", False: ""})
+    # старые строки registry.csv (до того, как log_run стал писать author) для своих 13
+    # оставили пустой author - это не COMM_*, значит по определению BaseStrategy.author
+    # это "Леша" (дефолт, см. base.py), безопасно подставить, не гоняя бэктест заново.
+    is_own = ~df["strategy_id"].str.startswith("COMM_")
+    df.loc[is_own & df["author"].isna(), "author"] = "Леша"
     df = df.sort_values("sharpe", ascending=False).reset_index(drop=True)
 
     lines = [
