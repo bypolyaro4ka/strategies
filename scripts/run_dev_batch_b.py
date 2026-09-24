@@ -123,7 +123,7 @@ def run_one(strategy, symbols, cfg):
             "strategy_id": strategy.id, "strategy_version": strategy.version, "variant": "V0",
             "mode": "portfolio", "tf": tf, "symbols": ";".join(bars_1h_by_symbol.keys()),
             "period_start": DEV_START, "period_end": DEV_END, "stage": "dev", "debug": "False",
-            "artifacts_path": str(out_dir.relative_to(PROJECT_ROOT)),
+            "author": strategy.author, "artifacts_path": str(out_dir.relative_to(PROJECT_ROOT)),
         },
         metrics,
     )
@@ -145,7 +145,7 @@ def run_one(strategy, symbols, cfg):
                 "run_id": str(uuid.uuid4())[:8], "timestamp_utc": __import__("pandas").Timestamp.now('UTC').isoformat(),
                 "strategy_id": strategy.id, "strategy_version": strategy.version, "variant": "V0",
                 "mode": "pair", "tf": tf, "symbols": s, "period_start": DEV_START, "period_end": DEV_END,
-                "stage": "dev", "debug": "False",
+                "stage": "dev", "debug": "False", "author": strategy.author,
             },
             m,
         )
@@ -167,13 +167,13 @@ def main():
     lines = ["# Партия B (популярные) — V0 на dev 2023-01-01..2025-12-31\n",
              "Режим «портфель» (основной для рейтинга) + «пара» по каждой монете (диагностика).\n"]
     lines.append("## Портфель (V0, дефолты)\n")
-    lines.append("| ID | Sharpe | Return | MaxDD | Trades | Cost share | Random pct | Отчёт |")
-    lines.append("|---|---|---|---|---|---|---|---|")
+    lines.append("| ID | Автор | Sharpe | Return | MaxDD | Trades | Cost share | Random pct | Отчёт |")
+    lines.append("|---|---|---|---|---|---|---|---|---|")
     for strategy, m, _, report_path in summary:
         rel = report_path.relative_to(PROJECT_ROOT / "reports" / "dev")
         rp = m.get("random_pct", float("nan"))
         lines.append(
-            f"| {strategy.id} | {m['sharpe']:.2f} | {m['total_return']*100:.1f}% | {m['maxdd']*100:.1f}% | "
+            f"| {strategy.id} | {strategy.author} | {m['sharpe']:.2f} | {m['total_return']*100:.1f}% | {m['maxdd']*100:.1f}% | "
             f"{m['trades']} | {m['cost_share']*100:.1f}% | "
             f"{'—' if rp != rp else f'{rp:.0f}'} | [{rel}]({rel}) |"
         )

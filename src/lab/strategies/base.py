@@ -68,7 +68,7 @@ class BaseStrategy(ABC):
     id: str
     name: str
     version: str
-    author: str = "Алексей"  # для лидерборда (06_LEADERBOARD.md) - чья стратегия
+    author: str = "Леша"  # для лидерборда (06_LEADERBOARD.md) - чья стратегия
     default_params: dict = {}
     param_grid: dict = {}
     timeframes: list[str] = []

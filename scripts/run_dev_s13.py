@@ -105,7 +105,7 @@ def main():
             "strategy_id": strategy.id, "strategy_version": strategy.version, "variant": "V0",
             "mode": "portfolio", "tf": tf, "symbols": ";".join(bars_1h_by_symbol.keys()),
             "period_start": DEV_START, "period_end": DEV_END, "stage": "dev", "debug": "False",
-            "artifacts_path": str(out_dir.relative_to(PROJECT_ROOT)),
+            "author": strategy.author, "artifacts_path": str(out_dir.relative_to(PROJECT_ROOT)),
         },
         metrics,
     )
