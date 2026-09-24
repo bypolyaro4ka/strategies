@@ -21,6 +21,14 @@ import pandas as pd
 from lab.strategies.base import BaseStrategy, Decision
 
 
+def _masked(cond: pd.Series, warmup: pd.Series) -> pd.Series:
+    """Булево условие -> float-колонка {1.0, 0.0, NaN}: NaN на баре прогрева, иначе
+    обычное bool как float. Через bool-колонку так не сделать: начиная с pandas 3.0
+    запись NaN в bool dtype кидает TypeError (раньше молча приводило к object) - а NaN
+    нужен, чтобы on_bar() мог отличить прогрев от настоящего False."""
+    return cond.astype(float).where(~warmup, float("nan"))
+
+
 def _wilder(x: pd.Series, period: int) -> pd.Series:
     return x.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
 
@@ -207,11 +215,11 @@ class Friend4BbSqueezeBreakout(_Friend4StatefulBase):
         av = _atr(out, p["n"])
         squeeze = (upper < center + p["kc_mult"] * av) & (lower > center - p["kc_mult"] * av)
         released = squeeze.shift(1).fillna(False) & ~squeeze
-        out["le"] = released & (c > upper)
-        out["se"] = released & (c < lower)
-        out["lx"] = c < center
-        out["sx"] = c > center
-        out.loc[mean.isna() | av.isna(), ["le", "se", "lx", "sx"]] = float("nan")
+        warmup = mean.isna() | av.isna()
+        out["le"] = _masked(released & (c > upper), warmup)
+        out["se"] = _masked(released & (c < lower), warmup)
+        out["lx"] = _masked(c < center, warmup)
+        out["sx"] = _masked(c > center, warmup)
         return out
 
 
@@ -234,11 +242,11 @@ class Friend4RsiPullback(_Friend4StatefulBase):
         r = _rsi(c, p["rsi_n"])
         trend = c.ewm(span=p["trend_n"], min_periods=p["trend_n"], adjust=False).mean()
         fast = c.ewm(span=5, min_periods=5, adjust=False).mean()
-        out["le"] = (r < p["edge"]) & (c > trend)
-        out["se"] = (r > 100 - p["edge"]) & (c < trend)
-        out["lx"] = (c >= fast) | (r > 50)
-        out["sx"] = (c <= fast) | (r < 50)
-        out.loc[trend.isna() | r.isna(), ["le", "se", "lx", "sx"]] = float("nan")
+        warmup = trend.isna() | r.isna()
+        out["le"] = _masked((r < p["edge"]) & (c > trend), warmup)
+        out["se"] = _masked((r > 100 - p["edge"]) & (c < trend), warmup)
+        out["lx"] = _masked((c >= fast) | (r > 50), warmup)
+        out["sx"] = _masked((c <= fast) | (r < 50), warmup)
         return out
 
 
@@ -262,11 +270,11 @@ class Friend4BbRegimeReversion(_Friend4StatefulBase):
         sd = c.rolling(p["n"], min_periods=p["n"]).std(ddof=0)
         upper, lower = mean + p["mult"] * sd, mean - p["mult"] * sd
         regime = c.ewm(span=p["regime_n"], min_periods=p["regime_n"], adjust=False).mean()
-        out["le"] = (c < lower) & (c > regime)
-        out["se"] = (c > upper) & (c < regime)
-        out["lx"] = c >= mean
-        out["sx"] = c <= mean
-        out.loc[mean.isna() | regime.isna(), ["le", "se", "lx", "sx"]] = float("nan")
+        warmup = mean.isna() | regime.isna()
+        out["le"] = _masked((c < lower) & (c > regime), warmup)
+        out["se"] = _masked((c > upper) & (c < regime), warmup)
+        out["lx"] = _masked(c >= mean, warmup)
+        out["sx"] = _masked(c <= mean, warmup)
         return out
 
 
@@ -297,9 +305,9 @@ class Friend4IchimokuRsi(_Friend4StatefulBase):
         top = pd.concat([span_a, span_b], axis=1).max(axis=1)
         bottom = pd.concat([span_a, span_b], axis=1).min(axis=1)
         r = _rsi(c, p["rsi_n"])
-        out["le"] = _cross_up(tenkan, kijun) & (c > top) & (r > 50)
-        out["se"] = _cross_down(tenkan, kijun) & (c < bottom) & (r < 50)
-        out["lx"] = (tenkan < kijun) | (c < bottom)
-        out["sx"] = (tenkan > kijun) | (c > top)
-        out.loc[kijun.isna() | top.isna() | r.isna(), ["le", "se", "lx", "sx"]] = float("nan")
+        warmup = kijun.isna() | top.isna() | r.isna()
+        out["le"] = _masked(_cross_up(tenkan, kijun) & (c > top) & (r > 50), warmup)
+        out["se"] = _masked(_cross_down(tenkan, kijun) & (c < bottom) & (r < 50), warmup)
+        out["lx"] = _masked((tenkan < kijun) | (c < bottom), warmup)
+        out["sx"] = _masked((tenkan > kijun) | (c > top), warmup)
         return out

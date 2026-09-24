@@ -99,12 +99,19 @@ def test_rsi_dca_enters_on_low_rsi_and_steps_up_on_drawdown():
 
 def test_turtle_donchian_reversal_flips_sign_directly():
     """На синтетическом ряду с чётким разворотом тренда стратегия должна хотя бы раз
-    развернуться напрямую (target меняет знак, минуя 0), не только войти/выйти в кэш."""
-    idx = pd.date_range("2023-01-01", periods=200, freq="4h", tz="UTC")
-    # рост 100 баров, затем чёткий спад - гарантированно пробивает оба канала в обе стороны
-    up = 100 + np.arange(100) * 2.0
-    down = up[-1] - np.arange(100) * 2.0
-    close = np.concatenate([up, down])
+    развернуться напрямую (target меняет знак, минуя 0), не только войти/выйти в кэш.
+
+    Канал 2 у GoshaTurtleDonchian строится по данным со сдвигом ещё на 20 баров назад
+    (CHANNEL2_OFFSET) - ему нужно ~41 бар истории, прежде чем он перестанет быть NaN.
+    Поэтому сначала держим цену плоской (чтобы оба канала прогрелись и совпали), и
+    только потом даём резкий рост - иначе момент пересечения канала 1 проходит раньше,
+    чем канал 2 успевает прогреться, и long_break/short_break никогда не срабатывают
+    (это и произошло в первой версии теста - монотонный рост с бара 0)."""
+    idx = pd.date_range("2023-01-01", periods=250, freq="4h", tz="UTC")
+    flat = np.full(70, 100.0)
+    up = 100 + (np.arange(80) + 1) * 2.0          # 102 .. 260, пробивает оба канала на баре 70
+    down = up[-1] - (np.arange(100) + 1) * 2.0    # 258 .. 60, разворот вниз
+    close = np.concatenate([flat, up, down])
     bars = pd.DataFrame({
         "open": close, "high": close + 0.5, "low": close - 0.5, "close": close,
         "volume": 1000.0, "quote_volume": 100.0, "trades": 1, "complete": True,
