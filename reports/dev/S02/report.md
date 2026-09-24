@@ -15,12 +15,12 @@
 | Sortino | 0.526 |
 | MaxDD | -29.76% |
 | Calmar | 0.194 |
-| Trades | 9 |
-| Win rate | 22.22% |
-| Profit factor | 0.086 |
-| Avg trade gross, б.п. | -224.4 |
-| Avg trade net, б.п. | -296.4 |
-| Cost share | 1644.26% |
+| Trades | 919 |
+| Win rate | 17.63% |
+| Profit factor | 0.140 |
+| Avg trade gross, б.п. | -366.8 |
+| Avg trade net, б.п. | -399.3 |
+| Cost share | 55.83% |
 | Exposure | 100.00% |
 | Funding paid | -385.16 |
 | DSR | 0.543 |

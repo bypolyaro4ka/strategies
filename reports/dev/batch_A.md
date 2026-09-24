@@ -7,9 +7,9 @@
 | ID | Sharpe | Return | MaxDD | Trades | Cost share | Random pct | Отчёт |
 |---|---|---|---|---|---|---|---|
 | S01 | 1.13 | 23.8% | -5.5% | 189 | 62.3% | — | [S01/report.md](S01/report.md) |
-| S01b | 0.98 | 20.8% | -8.3% | 138 | 49.3% | — | [S01b/report.md](S01b/report.md) |
-| S02 | 0.36 | 18.3% | -29.8% | 9 | 1644.3% | — | [S02/report.md](S02/report.md) |
-| S03 | 0.65 | 50.9% | -37.0% | 0 | 336.6% | — | [S03/report.md](S03/report.md) |
+| S01b | 0.98 | 20.8% | -8.3% | 364 | 40.1% | — | [S01b/report.md](S01b/report.md) |
+| S02 | 0.36 | 18.3% | -29.8% | 919 | 55.8% | — | [S02/report.md](S02/report.md) |
+| S03 | 0.65 | 50.9% | -37.0% | 808 | 4.8% | — | [S03/report.md](S03/report.md) |
 | S04 | 0.39 | 22.4% | -34.3% | 1524 | 4.1% | — | [S04/report.md](S04/report.md) |
 | S05 | 1.30 | 223.0% | -31.0% | 345 | 1.6% | — | [S05/report.md](S05/report.md) |
 
