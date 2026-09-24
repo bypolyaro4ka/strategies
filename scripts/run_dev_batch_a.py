@@ -37,7 +37,8 @@ from lab.strategies.s05_bollinger import S05
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEV_START, DEV_END = "2023-01-01", "2025-12-31"
-N_RANDOM_SEEDS = 200  # 1000 в протоколе - для скорости первого прогона урезано, см. JOURNAL
+N_RANDOM_SEEDS = 30  # 1000 в протоколе - портфельный прогон ~10с, 1000 сидов = часы;
+# для первого прохода урезано, полные 1000 - отдельным прогоном позже (см. JOURNAL)
 
 STRATEGIES = [S01(), S01b(), S02(), S03(), S04(), S05()]
 
