@@ -118,10 +118,12 @@ class PortfolioStrategy(ABC):
 
 class Overlay(ABC):
     """Надстройка — обёртка над стратегией, которая модифицирует Decision.target
-    (03_STRATEGIES.md, раздел O1/O2)."""
+    (03_STRATEGIES.md, раздел O1/O2). `row` — строка prepare() базовой стратегии на
+    момент t (та же, что видит on_bar()) - нужна надстройкам вроде O2 (таргетирование
+    волатильности), которым нужна СОБСТВЕННАЯ история цены монеты, не только ctx."""
 
     @abstractmethod
-    def apply(self, t: pd.Timestamp, symbol: str, decision: Decision, ctx: Context) -> Decision:
+    def apply(self, t: pd.Timestamp, symbol: str, row: pd.Series, decision: Decision, ctx: Context) -> Decision:
         ...
 
 
@@ -139,13 +141,18 @@ class WithOverlays:
         self.timeframes = strategy.timeframes
 
     def required_history(self, tf: str) -> int:
-        return self.strategy.required_history(tf)
+        return max([self.strategy.required_history(tf)] + [o.required_history(tf) for o in self.overlays
+                                                             if hasattr(o, "required_history")])
 
     def prepare(self, bars: pd.DataFrame, ctx: Context) -> pd.DataFrame:
-        return self.strategy.prepare(bars, ctx)
+        out = self.strategy.prepare(bars, ctx)
+        for overlay in self.overlays:
+            if hasattr(overlay, "prepare"):
+                out = overlay.prepare(out, ctx)
+        return out
 
     def on_bar(self, t: pd.Timestamp, row: pd.Series, pos: PositionState, ctx: Context) -> Decision:
         decision = self.strategy.on_bar(t, row, pos, ctx)
         for overlay in self.overlays:
-            decision = overlay.apply(t, pos.symbol, decision, ctx)
+            decision = overlay.apply(t, pos.symbol, row, decision, ctx)
         return decision
