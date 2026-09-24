@@ -122,7 +122,7 @@ def run_one(strategy, symbols, cfg):
     metrics = perf.compute_all(portfolio_result.equity, portfolio_result.trades, cfg.metrics.annualization_days)
     log_run(
         {
-            "run_id": str(uuid.uuid4())[:8], "timestamp_utc": __import__("pandas").Timestamp.utcnow().isoformat(),
+            "run_id": str(uuid.uuid4())[:8], "timestamp_utc": __import__("pandas").Timestamp.now('UTC').isoformat(),
             "strategy_id": strategy.id, "strategy_version": strategy.version, "variant": "V0",
             "mode": "portfolio", "tf": tf, "symbols": ";".join(bars_1h_by_symbol.keys()),
             "period_start": DEV_START, "period_end": DEV_END, "stage": "dev", "debug": "False",
@@ -145,7 +145,7 @@ def run_one(strategy, symbols, cfg):
         pair_rows.append((s, m))
         log_run(
             {
-                "run_id": str(uuid.uuid4())[:8], "timestamp_utc": __import__("pandas").Timestamp.utcnow().isoformat(),
+                "run_id": str(uuid.uuid4())[:8], "timestamp_utc": __import__("pandas").Timestamp.now('UTC').isoformat(),
                 "strategy_id": strategy.id, "strategy_version": strategy.version, "variant": "V0",
                 "mode": "pair", "tf": tf, "symbols": s, "period_start": DEV_START, "period_end": DEV_END,
                 "stage": "dev", "debug": "False",
