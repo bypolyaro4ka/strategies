@@ -37,8 +37,10 @@ from lab.strategies.s05_bollinger import S05
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEV_START, DEV_END = "2023-01-01", "2025-12-31"
-N_RANDOM_SEEDS = 30  # 1000 в протоколе - портфельный прогон ~10с, 1000 сидов = часы;
-# для первого прохода урезано, полные 1000 - отдельным прогоном позже (см. JOURNAL)
+RUN_RANDOM_BENCHMARK = False  # Random откладываем на отдельный прогон (портфельный бэктест
+# ~10с/сид, даже 30 сидов x 6 стратегий = ~30 мин - не нужно для санити-чека Этапа 5,
+# нужно только когда дойдём до сравнения с бенчмарками по-настоящему). См. JOURNAL.
+N_RANDOM_SEEDS = 30
 
 STRATEGIES = [S01(), S01b(), S02(), S03(), S04(), S05()]
 
@@ -96,7 +98,7 @@ def run_one(strategy, symbols, cfg):
 
     profile = trade_profile(portfolio_result.trades)
     random_sharpes = None
-    if profile["n_trades"] >= 3:
+    if RUN_RANDOM_BENCHMARK and profile["n_trades"] >= 3:
         tf_hours = {"1d": 24, "12h": 12, "4h": 4, "1h": 1}[tf]
         avg_holding_bars = profile["avg_holding_hours"] / tf_hours
         random_sharpes = random_benchmark_sharpes(
