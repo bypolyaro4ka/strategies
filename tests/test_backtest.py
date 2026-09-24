@@ -160,6 +160,27 @@ def test_reversal_splits_into_two_closed_trades():
     assert len(set(sides)) == 2
 
 
+# --- Пустое окно (Этап 7, walk-forward: молодая монета без баров в train-окне) ---
+
+def test_empty_bars_in_window_gives_empty_datetime_indexed_equity_not_crash():
+    """bars_1h обрезан до окна, в котором у монеты вообще нет баров (напр. HYPE в
+    train-окне 2023 года) - раньше pd.Series(dict()) давал RangeIndex, на котором
+    падал .resample("1D") в metrics/performance.py. Реальный баг, найден пользователем
+    на первом прогоне walk-forward для S02."""
+    idx = pd.date_range("2025-01-01", periods=24, freq="1h", tz="UTC")
+    bars = pd.DataFrame({
+        "open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0,
+        "volume": 1.0, "quote_volume": 100.0, "trades": 1, "complete": True,
+    }, index=idx)
+    empty = bars.iloc[:0]  # обрезка до окна, полностью до начала истории монеты
+    cfg = _cfg()
+    result = run_backtest(
+        AlwaysLongStub(), {"X": empty}, {"X": empty}, {}, "1d", cfg, 10_000, 1,
+    )
+    assert result.equity.empty
+    assert isinstance(result.equity.index, pd.DatetimeIndex)
+
+
 # --- signals_start (Этап 7, walk-forward test-окно "с нуля") ---
 
 def test_signals_start_keeps_position_flat_until_then():

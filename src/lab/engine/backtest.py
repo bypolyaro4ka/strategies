@@ -344,6 +344,13 @@ def run_backtest(
             t.exit_reason = "open_at_end"
             trades.append(t)
 
-    equity = pd.Series(dict(equity_points))
+    if equity_points:
+        equity = pd.Series(dict(equity_points))
+    else:
+        # bars_1h был пуст на весь запрошенный диапазон (напр. окно walk-forward
+        # раньше начала истории молодой монеты, см. HYPE в JOURNAL/universe.yaml) -
+        # pd.Series(dict()) даёт RangeIndex, а не DatetimeIndex, и ломает любой код
+        # выше, который считает дневные метрики (resample требует DatetimeIndex).
+        equity = pd.Series([], index=pd.DatetimeIndex([], tz="UTC"), dtype=float)
     equity.index.name = "time"
     return BacktestResult(equity=equity, trades=trades, orders=orders)

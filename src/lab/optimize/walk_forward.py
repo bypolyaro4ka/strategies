@@ -147,7 +147,18 @@ def run_walk_forward(
         v2_symbols = list(symbols_pool)
         if apply_coin_selection:
             pair_metrics = {}
+            train_start_ts = pd.Timestamp(train_start, tz="UTC")
+            train_end_ts = pd.Timestamp(train_end, tz="UTC")
             for s in symbols_pool:
+                # молодые монеты (напр. HYPE, см. universe.yaml) физически не имеют
+                # баров в ранних train-окнах (F1-F3) - это ожидалось с Этапа 1
+                # (JOURNAL, "HYPE естественно выпадет из WF по coin_min_trades_train"),
+                # но сам бэктест на пустом окне падал (equity без DatetimeIndex). Не
+                # гоняем его вообще - сразу 0 сделок, что и так исключит монету в
+                # select_coins() по coin_min_trades_train.
+                if bars_tf_by_symbol[s].loc[train_start_ts:train_end_ts].empty:
+                    pair_metrics[s] = {"sharpe": float("nan"), "trades": 0}
+                    continue
                 strat_pair = make_strategy(v1_params)
                 ctx = Context(params=v1_params, protocol=cfg, btc_bars=btc_bars)
                 prepared_pair = prepare_fn(strat_pair, {s: bars_tf_by_symbol[s]}, ctx)
