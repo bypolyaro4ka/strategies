@@ -38,7 +38,8 @@ class _ThresholdStub(BaseStrategy):
 def _cfg(folds, min_trades=0, min_coins=1):
     return SimpleNamespace(
         folds=folds,
-        account=SimpleNamespace(initial_equity=10_000, slot_fraction=0.10, max_slots_portfolio=3),
+        account=SimpleNamespace(initial_equity=10_000, slot_fraction=0.10, max_slots_portfolio=3,
+                                 min_target_change=0.0),
         exchange=SimpleNamespace(fee_taker=0.0005, slippage=0.0002),
         selection=SimpleNamespace(
             min_trades_train_portfolio=min_trades, coin_min_trades_train=1,
