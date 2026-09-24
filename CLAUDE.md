@@ -69,7 +69,8 @@ strategy_lab/
 │   └── prereg/                # пререгистрация перед holdout (Этап 7)
 ├── data/                      # в .gitignore
 │   ├── raw/                   # архивы data.binance.vision
-│   └── processed/             # parquet: {SYMBOL}_{tf}.parquet, {SYMBOL}_funding.parquet
+│   ├── processed/             # parquet: {SYMBOL}_{tf}.parquet, {SYMBOL}_funding.parquet (только dev-диапазон)
+│   └── processed/_holdout_locked/  # бары с 2026-01-01 — физически отдельно, см. 05_PLAN Этап 2
 ├── src/lab/
 │   ├── data/                  # download.py, validate.py, resample.py, loader.py
 │   ├── engine/                # backtest.py, execution.py, costs.py, portfolio.py

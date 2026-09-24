@@ -17,8 +17,9 @@ account:
   initial_equity: 10000
   slot_fraction: 0.10          # 10% текущего equity на один слот (одну монету)
   leverage: 1                  # суммарный |notional| <= equity
-  max_slots_portfolio: 10      # в портфельном режиме
+  max_slots_portfolio: 5       # в портфельном режиме; изменено 2026-09-24, было 10 (см. JOURNAL)
   min_target_change: 0.05      # изменения целевой позиции меньше — игнорируются
+  slot_contention_rule: existing_first_then_alpha  # см. 01_PROTOCOL.md, 5.5
   resize_on_equity_change: false  # позицию не пересчитываем только из-за изменения equity
 
 periods:

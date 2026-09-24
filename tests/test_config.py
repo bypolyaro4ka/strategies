@@ -11,6 +11,7 @@ def test_load_protocol_reads_real_config():
     assert cfg.frozen is False
     assert cfg.exchange.fee_taker == pytest.approx(0.0005)
     assert cfg.account.initial_equity == 10000
+    assert cfg.account.max_slots_portfolio == 5
     assert cfg.periods.holdout_start == "2026-01-01"
     assert len(cfg.folds) == 4
     assert cfg.folds[0].id == "F1"
@@ -32,7 +33,7 @@ def test_load_protocol_rejects_bad_fee(tmp_path):
 protocol_version: 1
 frozen: false
 exchange: {venue: x, quote: USDT, order_type: market, fee_taker: 5.0, fee_maker: 0.0002, slippage: 0.0002}
-account: {initial_equity: 10000, slot_fraction: 0.1, leverage: 1, max_slots_portfolio: 10, min_target_change: 0.05, resize_on_equity_change: false}
+account: {initial_equity: 10000, slot_fraction: 0.1, leverage: 1, max_slots_portfolio: 5, min_target_change: 0.05, resize_on_equity_change: false, slot_contention_rule: existing_first_then_alpha}
 periods: {timezone: UTC, data_start: "2022-01-01", dev_start: "2023-01-01", dev_end: "2025-12-31", holdout_start: "2026-01-01", holdout_end: null}
 timeframes: {base: 1h, derived: ["4h"], execution: 1h}
 walk_forward: {scheme: anchored, folds: [{id: F1, train: ["2023-01-01","2023-12-31"], test: ["2024-01-01","2024-06-30"]}]}

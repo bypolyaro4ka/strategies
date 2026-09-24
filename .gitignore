@@ -9,6 +9,7 @@ data/
 mlruns/
 mlflow.db
 *.parquet
+.cache/
 
 # секреты
 .env

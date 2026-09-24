@@ -40,6 +40,7 @@ class AccountConfig:
     max_slots_portfolio: int
     min_target_change: float
     resize_on_equity_change: bool
+    slot_contention_rule: str
 
 
 @dataclass(frozen=True)
@@ -156,6 +157,7 @@ def _parse(raw: dict) -> ProtocolConfig:
             max_slots_portfolio=int(acc["max_slots_portfolio"]),
             min_target_change=float(acc["min_target_change"]),
             resize_on_equity_change=bool(acc["resize_on_equity_change"]),
+            slot_contention_rule=acc["slot_contention_rule"],
         ),
         periods=PeriodsConfig(
             timezone=per["timezone"],
