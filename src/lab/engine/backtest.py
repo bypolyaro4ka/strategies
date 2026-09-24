@@ -21,7 +21,7 @@ from lab.engine.execution import (
     target_notional,
 )
 from lab.engine.portfolio import allocate_slots
-from lab.strategies.base import Context, PositionState
+from lab.strategies.base import Context, PortfolioStrategy, PositionState
 
 TF_HOURS = {"1h": 1, "4h": 4, "12h": 12, "1d": 24}
 
@@ -131,6 +131,7 @@ def run_backtest(
 
     cash_equity = equity0
     ctx = Context(params=getattr(strategy, "params", {}), protocol=protocol_cfg, btc_bars=btc_bars, funding=None)
+    is_portfolio_strategy = isinstance(strategy, PortfolioStrategy)
 
     all_times = sorted(set().union(*(df.index for df in bars_1h.values())))
 
@@ -260,25 +261,55 @@ def run_backtest(
         equity_points.append((h, cash_equity + unrealized))
 
         # --- шаг 5: сигнальные решения ---
+        # PortfolioStrategy (S13) видит все монеты сразу в одном вызове on_bar() - нужно
+        # ранжирование топ-k/боттом-k по всему пулу, не решить по одной монете независимо.
+        # Остальная часть шага 5 (min_target_change, слоты) - буквально та же логика,
+        # что и для обычной BaseStrategy, разница только в том, как получен `decisions`.
         decisions = {}
-        for s in rows:
-            if not is_signal_close(h, tf):
-                continue
-            sdf = signal_bars[s]
+        if is_portfolio_strategy:
+            eligible_rows, eligible_positions = {}, {}
             s_open = signal_open_for_close(h, tf)
-            if s_open not in sdf.index or not bool(sdf.loc[s_open, "complete"]):
-                continue
-            pos = positions[s]
-            if pos.is_open:
-                pos.bars_in_trade += 1
-            if locked[s]:
-                locked[s] = False
-                continue
-            decision = strategy.on_bar(s_open, sdf.loc[s_open], pos, ctx)
-            if passes_min_change(decision.target, pos.target, min_target_change):
-                decisions[s] = decision
-            else:
-                pos.stop_price, pos.take_price = decision.stop_price, decision.take_price
+            for s in rows:
+                if not is_signal_close(h, tf):
+                    continue
+                sdf = signal_bars[s]
+                if s_open not in sdf.index or not bool(sdf.loc[s_open, "complete"]):
+                    continue
+                pos = positions[s]
+                if pos.is_open:
+                    pos.bars_in_trade += 1
+                if locked[s]:
+                    locked[s] = False
+                    continue
+                eligible_rows[s] = sdf.loc[s_open]
+                eligible_positions[s] = pos
+            if eligible_rows:
+                raw_decisions = strategy.on_bar(s_open, eligible_rows, eligible_positions, ctx)
+                for s, decision in raw_decisions.items():
+                    pos = positions[s]
+                    if passes_min_change(decision.target, pos.target, min_target_change):
+                        decisions[s] = decision
+                    else:
+                        pos.stop_price, pos.take_price = decision.stop_price, decision.take_price
+        else:
+            for s in rows:
+                if not is_signal_close(h, tf):
+                    continue
+                sdf = signal_bars[s]
+                s_open = signal_open_for_close(h, tf)
+                if s_open not in sdf.index or not bool(sdf.loc[s_open, "complete"]):
+                    continue
+                pos = positions[s]
+                if pos.is_open:
+                    pos.bars_in_trade += 1
+                if locked[s]:
+                    locked[s] = False
+                    continue
+                decision = strategy.on_bar(s_open, sdf.loc[s_open], pos, ctx)
+                if passes_min_change(decision.target, pos.target, min_target_change):
+                    decisions[s] = decision
+                else:
+                    pos.stop_price, pos.take_price = decision.stop_price, decision.take_price
 
         open_symbols = {s for s in symbols if positions[s].is_open}
         new_entry_candidates = [s for s, d in decisions.items() if not positions[s].is_open and d.target != 0]

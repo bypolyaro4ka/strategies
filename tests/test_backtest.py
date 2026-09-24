@@ -13,7 +13,9 @@ from lab.engine.backtest import run_backtest
 from lab.engine.leak_tests import assert_future_poison_safe, assert_truncation_safe
 from lab.strategies.base import Context
 
-from stubs import AlwaysLongStub, EvenDayFlipStub, EvenDayLongStub, FlatStub, RollingMeanStub
+from stubs import (
+    AlwaysLongStub, EvenDayFlipStub, EvenDayLongStub, FlatStub, PortfolioTopBottomStub, RollingMeanStub,
+)
 
 
 def _cfg(fee_taker=0.0005, slippage=0.0002, slot_fraction=0.10, min_target_change=0.05):
@@ -156,6 +158,31 @@ def test_reversal_splits_into_two_closed_trades():
     # сторона сделки должна чередоваться long/short, а не оставаться одной и той же
     sides = [t.side for t in result.trades]
     assert len(set(sides)) == 2
+
+
+# --- PortfolioStrategy (S13) - движок должен уметь звать on_bar() со всеми монетами сразу ---
+
+def test_portfolio_strategy_ranks_across_all_symbols():
+    n = 72
+    idx = pd.date_range("2023-01-01", periods=n, freq="1h", tz="UTC")
+    flat = pd.Series([100.0] * n, index=idx)
+    up = pd.Series([100.0 + i * 0.2 for i in range(n)], index=idx)  # растёт - должен стать лонгом
+    down = pd.Series([200.0 - i * 0.2 for i in range(n)], index=idx)  # падает - должен стать шортом
+    bars = {}
+    for sym, series in (("AAA", flat), ("BBB", up), ("CCC", down)):
+        bars[sym] = pd.DataFrame({
+            "open": series, "high": series, "low": series, "close": series,
+            "volume": 1.0, "quote_volume": 100.0, "trades": 1, "complete": True,
+        }, index=idx)
+    cfg = _cfg(slot_fraction=0.30)
+    signal_bars = {s: _signal_bars(b) for s, b in bars.items()}
+    result = run_backtest(
+        PortfolioTopBottomStub(), bars, signal_bars, {}, "1d", cfg, equity0=10_000, max_slots=3,
+    )
+    long_entries = {o.symbol for o in result.orders if o.reason == "signal" and o.delta_qty > 0 and o.target_after > 0}
+    short_entries = {o.symbol for o in result.orders if o.reason == "signal" and o.delta_qty < 0 and o.target_after < 0}
+    assert "BBB" in long_entries  # растущая монета когда-то получила лонг
+    assert "CCC" in short_entries  # падающая монета когда-то получила шорт
 
 
 # --- Sanity по сделкам: even-day стратегия открывает и закрывает позиции ---

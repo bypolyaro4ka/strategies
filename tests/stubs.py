@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from lab.strategies.base import BaseStrategy, Decision
+from lab.strategies.base import BaseStrategy, Decision, PortfolioStrategy
 
 
 class AlwaysLongStub(BaseStrategy):
@@ -71,6 +71,33 @@ class EvenDayFlipStub(BaseStrategy):
     def on_bar(self, t, row, pos, ctx) -> Decision:
         target = 1.0 if t.day % 2 == 0 else -1.0
         return Decision(target=target, tag="even_day_flip")
+
+
+class PortfolioTopBottomStub(PortfolioStrategy):
+    """Заглушка PortfolioStrategy (для проверки движка на S13) - лонг символ с
+    наибольшим close, шорт символ с наименьшим, остальные в 0. Видит все монеты сразу
+    в одном вызове on_bar() - именно то, чего не может обычная BaseStrategy."""
+    id = "STUB_PORTFOLIO_TOP_BOTTOM"
+    name = "portfolio_top_bottom"
+    version = "1.0.0"
+    timeframes = ["1d"]
+    direction = "long_short"
+
+    def required_history(self, tf: str) -> int:
+        return 0
+
+    def prepare(self, bars_by_symbol: dict[str, pd.DataFrame], ctx) -> dict[str, pd.DataFrame]:
+        return dict(bars_by_symbol)
+
+    def on_bar(self, t, rows: dict[str, pd.Series], positions: dict, ctx) -> dict[str, Decision]:
+        if len(rows) < 2:
+            return {s: Decision(target=0.0, tag="too_few_symbols") for s in rows}
+        by_close = sorted(rows.items(), key=lambda kv: kv[1]["close"])
+        winner, loser = by_close[-1][0], by_close[0][0]
+        return {
+            s: Decision(target=(1.0 if s == winner else (-1.0 if s == loser else 0.0)), tag="rank")
+            for s in rows
+        }
 
 
 class RollingMeanStub(BaseStrategy):
