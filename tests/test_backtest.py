@@ -13,7 +13,7 @@ from lab.engine.backtest import run_backtest
 from lab.engine.leak_tests import assert_future_poison_safe, assert_truncation_safe
 from lab.strategies.base import Context
 
-from stubs import AlwaysLongStub, EvenDayLongStub, FlatStub, RollingMeanStub
+from stubs import AlwaysLongStub, EvenDayFlipStub, EvenDayLongStub, FlatStub, RollingMeanStub
 
 
 def _cfg(fee_taker=0.0005, slippage=0.0002, slot_fraction=0.10, min_target_change=0.05):
@@ -136,6 +136,26 @@ def test_slot_contention_through_full_loop():
     )
     entered = {o.symbol for o in result.orders if o.reason == "signal" and o.delta_qty > 0}
     assert entered == {"AAA", "BBB"}  # первые два по алфавиту из трёх кандидатов, ZZZ - нет
+
+
+# --- Reversal: разворот target через 0 закрывает старую сделку и открывает новую ---
+
+def test_reversal_splits_into_two_closed_trades():
+    bars = _flat_bars(96)  # 4 дня: нечётный/чётный/нечётный/чётный -> 3 разворота после входа
+    cfg = _cfg()
+    result = run_backtest(
+        EvenDayFlipStub(), {"X": bars}, {"X": _signal_bars(bars)}, {}, "1d", cfg, 10_000, 1,
+    )
+    # ни одна сделка не должна повиснуть "открытой без exit_time" из-за разворота -
+    # только сама последняя (ещё не закрытая на конец периода) вправе иметь exit_time=None
+    closed = [t for t in result.trades if t.exit_time is not None]
+    assert len(closed) >= 2
+    for t in closed:
+        assert t.exit_reason in ("reversal", "exit_signal")
+        assert t.fees > 0
+    # сторона сделки должна чередоваться long/short, а не оставаться одной и той же
+    sides = [t.side for t in result.trades]
+    assert len(set(sides)) == 2
 
 
 # --- Sanity по сделкам: even-day стратегия открывает и закрывает позиции ---

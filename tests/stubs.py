@@ -55,6 +55,24 @@ class EvenDayLongStub(BaseStrategy):
         return Decision(target=target, tag="even_day")
 
 
+class EvenDayFlipStub(BaseStrategy):
+    """Лонг по чётным дням месяца, шорт по нечётным - никогда не уходит в кэш.
+    Для проверки разворота позиции (Reversal): движок не должен терять сделку,
+    когда target меняет знак, минуя 0."""
+    id = "STUB_EVEN_DAY_FLIP"
+    name = "even_day_flip"
+    version = "1.0.0"
+    timeframes = ["1d"]
+    direction = "long_short"
+
+    def prepare(self, bars: pd.DataFrame, ctx) -> pd.DataFrame:
+        return bars
+
+    def on_bar(self, t, row, pos, ctx) -> Decision:
+        target = 1.0 if t.day % 2 == 0 else -1.0
+        return Decision(target=target, tag="even_day_flip")
+
+
 class RollingMeanStub(BaseStrategy):
     """close выше скользящей средней за window баров -> лонг, иначе вне рынка.
     Простейший пример стратегии с прогревом и rolling-индикатором - для проверки

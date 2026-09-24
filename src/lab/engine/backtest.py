@@ -206,10 +206,33 @@ def run_backtest(
             cash_equity += realized - fee
 
             was_flat = pos.qty == 0
+            crosses_zero = not was_flat and qty_new != 0 and (qty_new > 0) != (pos.qty > 0)
+
             if was_flat and qty_new != 0:
                 open_trade[s] = Trade(
                     symbol=s, side="long" if qty_new > 0 else "short",
                     entry_time=h, entry_price=px, qty=abs(qty_new), slippage_cost=slip,
+                )
+            elif crosses_zero:
+                # Разворот без прохода через 0 (напр. target +1 -> -1): один ордер
+                # одновременно закрывает старую позицию и открывает новую в другую
+                # сторону. Это ДВЕ сделки для реестра trades, не продолжение одной -
+                # иначе Trades/Win rate/Profit factor занижаются (сделка никогда не
+                # "закрывается", пока стратегия не уйдёт в кэш). Комиссию и
+                # проскальзывание одного ордера делим пропорционально между
+                # закрываемой и открываемой частью по объёму.
+                close_frac = abs(pos.qty) / abs(delta_qty)
+                open_frac = abs(qty_new) / abs(delta_qty)
+                if open_trade[s] is not None:
+                    _close_trade(
+                        open_trade[s], h, px, realized,
+                        fee * close_frac, slip * close_frac, "reversal",
+                    )
+                    trades.append(open_trade[s])
+                open_trade[s] = Trade(
+                    symbol=s, side="long" if qty_new > 0 else "short",
+                    entry_time=h, entry_price=px, qty=abs(qty_new),
+                    fees=fee * open_frac, slippage_cost=slip * open_frac,
                 )
             elif qty_new == 0 and open_trade[s] is not None:
                 _close_trade(open_trade[s], h, px, realized, fee, slip, "exit_signal")
@@ -222,7 +245,7 @@ def run_backtest(
             pos.qty, pos.avg_entry_price = qty_new, avg_new
             pos.target = decision.target
             pos.notional = capped_notional if qty_new != 0 else 0.0
-            if qty_new == 0:
+            if qty_new == 0 or crosses_zero:
                 pos.bars_in_trade = 0
             pos.stop_price = decision.stop_price
             pos.take_price = decision.take_price
